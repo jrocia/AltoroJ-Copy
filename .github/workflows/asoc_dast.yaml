@@ -13,7 +13,7 @@ jobs:
           baseurl:  https://cloud.appscan.com
           asoc_key: ${{secrets.ASOC_KEY}}
           asoc_secret: ${{secrets.ASOC_SECRET}}
-          application_id: acd3ef50-6276-461d-8514-abc6e7113577
+          application_id: ${{secrets.APP_ID}}
           dynamic_scan_type: dast
           starting_URL: 'https://demo.testfire.net?mode=demo'
           login_method: userpass
