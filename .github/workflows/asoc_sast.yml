@@ -7,18 +7,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Install extra packages (example)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gradle
+#      - name: Install extra packages (example)
+#        run: |
+#          sudo apt-get update
+#          sudo apt-get install -y gradle
+#          ls -la 
+#          pwd
       - name: Run AppScan SAST Scan
         uses: HCL-TECH-SOFTWARE/appscan-sast-action@v1.0.7
         with:
           asoc_key: ${{secrets.ASOC_KEY}}
           asoc_secret: ${{secrets.ASOC_SECRET}}
           application_id: ${{secrets.APP_ID}}
-          static_analysis_only: true
-          scan_build_outputs: true
-          wait_for_analysis: true
-          fail_for_noncompliance: true
-          failure_threshold: high
+#          static_analysis_only: true
+#          scan_build_outputs: true
+#          wait_for_analysis: true
+#          fail_for_noncompliance: true
+#          failure_threshold: high
