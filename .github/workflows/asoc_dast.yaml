@@ -1,4 +1,4 @@
-name: "HCL AppScan DAST - basic"
+name: "HCL AppScan DAST - template scan"
 on:
   workflow_dispatch
 jobs:
@@ -14,11 +14,8 @@ jobs:
           asoc_key: ${{secrets.ASOC_KEY}}
           asoc_secret: ${{secrets.ASOC_SECRET}}
           application_id: 6934a46a-6db2-4e0d-b71f-2f9d33f150ea
-          dynamic_scan_type: dast
-          starting_URL: 'https://demo.testfire.net?mode=demo'
-          login_method: userpass
-          login_user: jsmith
-          login_password: demo1234
+          dynamic_scan_type: 'upload'
+          scan_or_scant_file: 'collectionprueba.scan'
           network: public
           fail_for_noncompliance: false
           wait_for_analysis: true
