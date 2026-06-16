@@ -46,11 +46,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-         # Captura o log do job atual e salva no arquivo scan.log
-         # Usamos o ID do run para garantir que estamos pegando o log certo
-          gh run view ${{ github.run_id }} --log > scan.log
+          # 1. Aguarda o status do run ficar 'completed' antes de tentar baixar
+          echo "Aguardando conclusão do run para baixar os logs..."
+          gh run watch ${{ github.run_id }} --exit-status
           
-          # Agora você pode ver o conteúdo do arquivo
+          # 2. Agora que sabemos que terminou, baixa o log
+          gh run view ${{ github.run_id }} --log > scan.log
           cat scan.log
 
 
