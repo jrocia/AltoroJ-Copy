@@ -27,3 +27,4 @@ jobs:
         run: |
           ls -la 
           pwd
+          printenv
