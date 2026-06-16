@@ -59,6 +59,9 @@ jobs:
               output: {
                 title: 'HCL AppScan SAST – Scan Summary',
                 summary: 'Static Application Security Testing completed.',
-                text: ''
+                text: `
+                asdasdsa
+                `| Severity | Findings |
+                 |----------|----------|`
               }
             });
