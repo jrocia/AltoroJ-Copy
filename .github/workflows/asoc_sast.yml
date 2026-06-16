@@ -73,3 +73,95 @@ jobs:
         run: |
           echo "Total : ${{ needs.parse.outputs.total_issues }}"
           echo "High  : ${{ needs.parse.outputs.high_issues }}"
+
+  report:
+    runs-on: ubuntu-latest
+    needs: parse
+    if: always()
+    steps:
+      - name: Publish security report
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TOTAL:  ${{ needs.parse.outputs.total_issues }}
+          HIGH:   ${{ needs.parse.outputs.high_issues }}
+          MEDIUM: ${{ needs.parse.outputs.medium_issues }}
+          LOW:    ${{ needs.parse.outputs.low_issues }}
+        run: |
+          # Calcula percentuais
+          PCT_HIGH=$(echo "scale=0; $HIGH * 100 / $TOTAL" | bc)
+          PCT_MED=$(echo  "scale=0; $MEDIUM * 100 / $TOTAL" | bc)
+          PCT_LOW=$(echo  "scale=0; $LOW  * 100 / $TOTAL" | bc)
+
+          BAR_HIGH=$(echo "scale=0; $HIGH * 100 / $TOTAL" | bc)
+          BAR_MED=$(echo  "scale=0; $MEDIUM * 100 / $TOTAL" | bc)
+          BAR_LOW=$(echo  "scale=0; $LOW  * 100 / $TOTAL" | bc)
+
+          # Define ícone de status geral
+          if [ "$HIGH" -gt 0 ]; then STATUS_ICON="🔴"; STATUS="Atenção — issues críticos encontrados";
+          elif [ "$MEDIUM" -gt 0 ]; then STATUS_ICON="🟡"; STATUS="Revisão recomendada";
+          else STATUS_ICON="🟢"; STATUS="Nenhum issue crítico"; fi
+
+          # ── Monta o HTML do relatório ──────────────────────────────────
+          REPORT=$(cat <<HTML
+          <h2>${STATUS_ICON} AppScan SAST — Security report</h2>
+          <p><strong>${STATUS}</strong></p>
+
+          <table>
+          <tr>
+            <th align="center">Total</th>
+            <th align="center">🔴 High</th>
+            <th align="center">🟡 Medium</th>
+            <th align="center">🟢 Low</th>
+          </tr>
+          <tr>
+            <td align="center"><strong>${TOTAL}</strong></td>
+            <td align="center"><strong>${HIGH}</strong></td>
+            <td align="center"><strong>${MEDIUM}</strong></td>
+            <td align="center"><strong>${LOW}</strong></td>
+          </tr>
+          </table>
+
+          <h3>Distribution</h3>
+
+          <table width="100%">
+          <tr>
+            <td width="60"><strong>High</strong></td>
+            <td><img src="https://progress-bar.xyz/${BAR_HIGH}/?width=400&color=D85A30&bg=f5f5f5" height="14"/></td>
+            <td width="60" align="right">${PCT_HIGH}% (${HIGH})</td>
+          </tr>
+          <tr>
+            <td><strong>Medium</strong></td>
+            <td><img src="https://progress-bar.xyz/${BAR_MED}/?width=400&color=EF9F27&bg=f5f5f5" height="14"/></td>
+            <td align="right">${PCT_MED}% (${MEDIUM})</td>
+          </tr>
+          <tr>
+            <td><strong>Low</strong></td>
+            <td><img src="https://progress-bar.xyz/${BAR_LOW}/?width=400&color=1D9E75&bg=f5f5f5" height="14"/></td>
+            <td align="right">${PCT_LOW}% (${LOW})</td>
+          </tr>
+          </table>
+
+          <p><sub>🔗 <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">Ver run completa</a> · Scan: <code>${{ github.sha }}</code></sub></p>
+          HTML
+          )
+
+          # ── 1. Job Summary ─────────────────────────────────────────────
+          echo "$REPORT" >> $GITHUB_STEP_SUMMARY
+
+          # ── 2. Comentário no PR ────────────────────────────────────────
+          PR_NUMBER=$(gh pr view --json number -q .number 2>/dev/null || echo "")
+
+          if [ -n "$PR_NUMBER" ]; then
+            # Remove comentário anterior do bot (evita spam)
+            COMMENT_ID=$(gh api \
+              "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+              --jq '.[] | select(.user.login == "github-actions[bot]") | select(.body | contains("AppScan SAST")) | .id' \
+              | head -1)
+
+            if [ -n "$COMMENT_ID" ]; then
+              gh api --method DELETE \
+                "repos/${{ github.repository }}/issues/comments/${COMMENT_ID}"
+            fi
+
+            gh pr comment "$PR_NUMBER" --body "$REPORT"
+          fi
