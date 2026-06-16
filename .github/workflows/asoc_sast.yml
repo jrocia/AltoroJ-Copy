@@ -7,12 +7,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Install extra packages (example)
-        run: |
-          ls -la 
-          pwd
-          echo ${{secrets.APP_ID}}
-      - name: Run AppScan SAST Scan
+      - name: Run AppScan SAST scan
         uses: HCL-TECH-SOFTWARE/appscan-sast-action@v1.0.8
         with:
           asoc_key: ${{secrets.ASOC_KEY}}
