@@ -7,7 +7,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Install extra packages (example)
+      - name: Before scan
         run: |
           ls -la 
           pwd
@@ -23,3 +23,7 @@ jobs:
           wait_for_analysis: true
 #          fail_for_noncompliance: true
 #          failure_threshold: critical
+      - name: After scan
+        run: |
+          ls -la 
+          pwd
