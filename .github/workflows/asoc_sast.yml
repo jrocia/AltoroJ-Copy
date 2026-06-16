@@ -17,11 +17,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Before scan
-        run: |
-          ls -la
-          pwd
-
       - name: Run AppScan SAST Scan
         id: appscan
         uses: HCL-TECH-SOFTWARE/appscan-sast-action@v1.0.7
@@ -31,36 +26,53 @@ jobs:
           application_id: ${{ secrets.APP_ID }}
           static_analysis_only: true
           wait_for_analysis: true
-          # scan_build_outputs: true
-          # fail_for_noncompliance: true
-          # failure_threshold: critical
 
-      - name: After scan
-        run: |
-          ls -la
-          pwd
-
-      # ⬇️ CHECK RUN – visual estilo Orca
       - name: Publish AppScan Security Check
         if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         uses: actions/github-script@v7
         with:
           script: |
-            const jobStatus = '${{ job.status }}';
-            const conclusion = jobStatus === 'success' ? 'success' : 'failure';
+            const { execSync } = require('child_process');
+            
+            // 1. Busca o log do job atual e filtra as linhas de resultado
+            // Usamos tail -n 20 para otimizar a leitura do log
+            const cmd = 'gh run view ${{ github.run_id }} --job ${{ github.job }} --log | tail -n 20';
+            const log = execSync(cmd).toString();
+            
+            // 2. Função auxiliar para extrair números via Regex
+            const getVal = (label) => {
+              const regex = new RegExp(`${label}: (\\d+)`);
+              const match = log.match(regex);
+              return match ? match[1] : '0';
+            };
 
+            const total = getVal('Total issues');
+            const high = getVal('High issues');
+            const medium = getVal('Medium issues');
+            const low = getVal('Low issues');
+
+            // 3. Monta o Markdown do resumo
+            const summaryText = `| Severidade | Quantidade |\n| :--- | :--- |\n| **Total** | ${total} |\n| **High** | ${high} |\n| **Medium** | ${medium} |\n| **Low** | ${low} |`;
+
+            // 4. Escreve no Sumário do GitHub Actions (aba Summary)
+            await core.summary
+              .addHeading('HCL AppScan SAST - Resultados')
+              .addRaw(summaryText)
+              .write();
+            
+            // 5. Publica no Check Run (visível no PR)
             await github.rest.checks.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
               name: 'HCL AppScan SAST',
               head_sha: context.sha,
               status: 'completed',
-              conclusion: conclusion,
+              conclusion: '${{ job.status }}' === 'success' ? 'success' : 'failure',
               output: {
                 title: 'HCL AppScan SAST – Scan Summary',
-                summary: 'Static Application Security Testing completed.',
-                text: `
-                Severity Findings
-               `
+                summary: 'Análise de segurança concluída.',
+                text: summaryText
               }
             });
