@@ -8,11 +8,15 @@ permissions:
   checks: write
   pull-requests: write
   contents: read
-  actions: read
 
 jobs:
   scan:
     runs-on: ubuntu-latest
+    outputs:
+      total_issues:  ${{ steps.parse_results.outputs.total_issues }}
+      high_issues:   ${{ steps.parse_results.outputs.high_issues }}
+      medium_issues: ${{ steps.parse_results.outputs.medium_issues }}
+      low_issues:    ${{ steps.parse_results.outputs.low_issues }}
 
     steps:
       - name: Checkout
@@ -32,50 +36,33 @@ jobs:
           application_id: ${{ secrets.APP_ID }}
           static_analysis_only: true
           wait_for_analysis: true
-          # scan_build_outputs: true
-          # fail_for_noncompliance: true
-          # failure_threshold: critical
 
-      - name: After scan
+      - name: Parse results from runner log
+        id: parse_results
+        if: always()  # roda mesmo se o scan falhar
         run: |
-          ls -la
-          pwd
+          # O GitHub Actions salva o log de cada step neste path durante a execução
+          LOG_FILE="${RUNNER_TEMP}/_github_workflow/$(echo '${{ github.run_id }}')/logs/$(echo '${{ github.job }}')/appscan.log"
 
-      - name: Salvar log em arquivo
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # 1. Aguarda o status do run ficar 'completed' antes de tentar baixar
-          echo "Aguardando conclusão do run para baixar os logs..."
-          gh run watch ${{ github.run_id }} --exit-status
-          
-          # 2. Agora que sabemos que terminou, baixa o log
-          gh run view ${{ github.run_id }} --log > scan.log
-          cat scan.log
+          # Alternativa mais confiável: usar o log do workflow via arquivo de diagnóstico
+          # O runner escreve os logs em $RUNNER_DIAGNOSTIC_LOGFILE quando ACTIONS_STEP_DEBUG=true
+          # 
+          # Solução mais simples: redirecionar o output para um arquivo compartilhado
+          # usando uma variável de ambiente definida ANTES do step da action
 
+          LOGFILE="${RUNNER_TEMP}/appscan_output.log"
 
-      # ⬇️ CHECK RUN – visual estilo Orca
-      - name: Publish AppScan Security Check
-        if: always()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const jobStatus = '${{ job.status }}';
-            const conclusion = jobStatus === 'success' ? 'success' : 'failure';
+          if [ -f "$LOGFILE" ]; then
+            TOTAL=$(grep  'Total issues:'  "$LOGFILE" | awk '{print $NF}')
+            HIGH=$(grep   'High issues:'   "$LOGFILE" | awk '{print $NF}')
+            MEDIUM=$(grep 'Medium issues:' "$LOGFILE" | awk '{print $NF}')
+            LOW=$(grep    'Low issues:'    "$LOGFILE" | awk '{print $NF}')
 
-            await github.rest.checks.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              name: 'HCL AppScan SAST',
-              head_sha: context.sha,
-              status: 'completed',
-              conclusion: conclusion,
-              output: {
-                title: 'HCL AppScan SAST – Scan Summary',
-                summary: 'Static Application Security Testing completed.',
-                text: `
-                Severity Findings
-               `
-              }
-            });
+            echo "total_issues=${TOTAL:-0}"   >> $GITHUB_OUTPUT
+            echo "high_issues=${HIGH:-0}"     >> $GITHUB_OUTPUT
+            echo "medium_issues=${MEDIUM:-0}" >> $GITHUB_OUTPUT
+            echo "low_issues=${LOW:-0}"       >> $GITHUB_OUTPUT
+          else
+            echo "❌ Log file não encontrado em $LOGFILE"
+            exit 1
+          fi
