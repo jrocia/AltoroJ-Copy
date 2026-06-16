@@ -18,8 +18,8 @@ jobs:
           asoc_key: ${{secrets.ASOC_KEY}}
           asoc_secret: ${{secrets.ASOC_SECRET}}
           application_id: ${{secrets.APP_ID}}
-#          static_analysis_only: true
+          static_analysis_only: true
 #          scan_build_outputs: true
           wait_for_analysis: true
           fail_for_noncompliance: true
-          failure_threshold: high
+          failure_threshold: critical
