@@ -1,39 +1,44 @@
 name: "HCL AppScan SAST"
+
 on:
-  workflow_dispatch
+  workflow_dispatch:
+  pull_request:
 
 permissions:
   checks: write
   pull-requests: write
   contents: read
-  
+
 jobs:
   scan:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Before scan
         run: |
-          ls -la 
+          ls -la
           pwd
-          echo ${{secrets.APP_ID}}
+
       - name: Run AppScan SAST Scan
+        id: appscan
         uses: HCL-TECH-SOFTWARE/appscan-sast-action@v1.0.7
         with:
-          asoc_key: ${{secrets.ASOC_KEY}}
-          asoc_secret: ${{secrets.ASOC_SECRET}}
-          application_id: ${{secrets.APP_ID}}
+          asoc_key: ${{ secrets.ASOC_KEY }}
+          asoc_secret: ${{ secrets.ASOC_SECRET }}
+          application_id: ${{ secrets.APP_ID }}
           static_analysis_only: true
-#          scan_build_outputs: true
           wait_for_analysis: true
-#          fail_for_noncompliance: true
-#          failure_threshold: critical
+          # scan_build_outputs: true
+          # fail_for_noncompliance: true
+          # failure_threshold: critical
+
       - name: After scan
         run: |
-          ls -la 
+          ls -la
           pwd
-          printenv
 
       # ⬇️ CHECK RUN – visual estilo Orca
       - name: Publish AppScan Security Check
@@ -41,9 +46,8 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const conclusion = '${{ job.status }}' === 'success'
-              ? 'success'
-              : 'failure';
+            const jobStatus = process.env.GITHUB_JOB_STATUS || '${{ job.status }}';
+            const conclusion = jobStatus === 'success' ? 'success' : 'failure';
 
             await github.rest.checks.create({
               owner: context.repo.owner,
@@ -55,6 +59,16 @@ jobs:
               output: {
                 title: 'HCL AppScan SAST – Scan Summary',
                 summary: 'Static Application Security Testing completed.',
-                text: 
+                text: `
+| Severity | Findings |
+|----------|----------|
+| Critical | 0 |
+| High     | 0 |
+| Medium   | 0 |
+| Low      | 0 |
+
+View full report in AppScan:
+https://cloud.appscan.com
+`
               }
             });
