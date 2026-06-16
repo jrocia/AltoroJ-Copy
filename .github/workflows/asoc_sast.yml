@@ -21,5 +21,5 @@ jobs:
 #          static_analysis_only: true
 #          scan_build_outputs: true
            wait_for_analysis: true
-#          fail_for_noncompliance: true
+           fail_for_noncompliance: true
            failure_threshold: high
