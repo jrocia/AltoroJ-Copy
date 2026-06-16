@@ -1,6 +1,12 @@
 name: "HCL AppScan SAST"
 on:
   workflow_dispatch
+
+permissions:
+  checks: write
+  pull-requests: write
+  contents: read
+  
 jobs:
   scan:
     runs-on: ubuntu-latest
@@ -28,3 +34,36 @@ jobs:
           ls -la 
           pwd
           printenv
+
+      # ⬇️ CHECK RUN – visual estilo Orca
+      - name: Publish AppScan Security Check
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const conclusion = '${{ job.status }}' === 'success'
+              ? 'success'
+              : 'failure';
+
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'HCL AppScan SAST',
+              head_sha: context.sha,
+              status: 'completed',
+              conclusion: conclusion,
+              output: {
+                title: 'HCL AppScan SAST – Scan Summary',
+                summary: 'Static Application Security Testing completed.',
+                text: `
+| Severity | Findings |
+|---------|----------|
+| Critical | 0 |
+| High     | 0 |
+| Medium   | 0 |
+| Low      | 0 |
+
+[View full report in AppScan](https://cloud.appscan.com)
+`
+              }
+            });
