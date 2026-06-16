@@ -22,11 +22,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Before scan
-        run: |
-          ls -la
-          pwd
-
       - name: Run AppScan SAST Scan
         id: appscan
         uses: HCL-TECH-SOFTWARE/appscan-sast-action@v1.0.7
@@ -37,32 +32,35 @@ jobs:
           static_analysis_only: true
           wait_for_analysis: true
 
-      - name: Parse results from runner log
+      - name: Parse results from this job's log
         id: parse_results
-        if: always()  # roda mesmo se o scan falhar
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # O GitHub Actions salva o log de cada step neste path durante a execução
-          LOG_FILE="${RUNNER_TEMP}/_github_workflow/$(echo '${{ github.run_id }}')/logs/$(echo '${{ github.job }}')/appscan.log"
+          RUN_ID="${{ github.run_id }}"
+          REPO="${{ github.repository }}"
 
-          # Alternativa mais confiável: usar o log do workflow via arquivo de diagnóstico
-          # O runner escreve os logs em $RUNNER_DIAGNOSTIC_LOGFILE quando ACTIONS_STEP_DEBUG=true
-          # 
-          # Solução mais simples: redirecionar o output para um arquivo compartilhado
-          # usando uma variável de ambiente definida ANTES do step da action
+          # Pega o job_id deste job específico (não de outro run concorrente)
+          JOB_ID=$(gh api \
+            "repos/$REPO/actions/runs/$RUN_ID/jobs" \
+            --jq '.jobs[] | select(.name == "scan") | .id')
 
-          LOGFILE="${RUNNER_TEMP}/appscan_output.log"
+          echo "Job ID: $JOB_ID"
 
-          if [ -f "$LOGFILE" ]; then
-            TOTAL=$(grep  'Total issues:'  "$LOGFILE" | awk '{print $NF}')
-            HIGH=$(grep   'High issues:'   "$LOGFILE" | awk '{print $NF}')
-            MEDIUM=$(grep 'Medium issues:' "$LOGFILE" | awk '{print $NF}')
-            LOW=$(grep    'Low issues:'    "$LOGFILE" | awk '{print $NF}')
+          # Baixa o log deste job específico
+          gh api "repos/$REPO/actions/jobs/$JOB_ID/logs" > job.log
 
-            echo "total_issues=${TOTAL:-0}"   >> $GITHUB_OUTPUT
-            echo "high_issues=${HIGH:-0}"     >> $GITHUB_OUTPUT
-            echo "medium_issues=${MEDIUM:-0}" >> $GITHUB_OUTPUT
-            echo "low_issues=${LOW:-0}"       >> $GITHUB_OUTPUT
-          else
-            echo "❌ Log file não encontrado em $LOGFILE"
-            exit 1
-          fi
+          # Parseia as linhas do step do appscan
+          TOTAL=$(grep  'Total issues:'  job.log | awk '{print $NF}' | tail -1)
+          HIGH=$(grep   'High issues:'   job.log | awk '{print $NF}' | tail -1)
+          MEDIUM=$(grep 'Medium issues:' job.log | awk '{print $NF}' | tail -1)
+          LOW=$(grep    'Low issues:'    job.log | awk '{print $NF}' | tail -1)
+
+          echo "total_issues=${TOTAL:-0}"   >> $GITHUB_OUTPUT
+          echo "high_issues=${HIGH:-0}"     >> $GITHUB_OUTPUT
+          echo "medium_issues=${MEDIUM:-0}" >> $GITHUB_OUTPUT
+          echo "low_issues=${LOW:-0}"       >> $GITHUB_OUTPUT
+
+          # Debug
+          echo "Total=$TOTAL | High=$HIGH | Medium=$MEDIUM | Low=$LOW"
