@@ -12,12 +12,6 @@ permissions:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    outputs:
-      total_issues:  ${{ steps.parse_results.outputs.total_issues }}
-      high_issues:   ${{ steps.parse_results.outputs.high_issues }}
-      medium_issues: ${{ steps.parse_results.outputs.medium_issues }}
-      low_issues:    ${{ steps.parse_results.outputs.low_issues }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,26 +26,33 @@ jobs:
           static_analysis_only: true
           wait_for_analysis: true
 
-      - name: Parse results from this job's log
+  parse:
+    runs-on: ubuntu-latest
+    needs: scan          # ← só roda depois que scan TERMINOU
+    if: always()
+    outputs:
+      total_issues:  ${{ steps.parse_results.outputs.total_issues }}
+      high_issues:   ${{ steps.parse_results.outputs.high_issues }}
+      medium_issues: ${{ steps.parse_results.outputs.medium_issues }}
+      low_issues:    ${{ steps.parse_results.outputs.low_issues }}
+    steps:
+      - name: Parse results from scan job's log
         id: parse_results
-        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           RUN_ID="${{ github.run_id }}"
           REPO="${{ github.repository }}"
 
-          # Pega o job_id deste job específico (não de outro run concorrente)
+          # Agora o job "scan" já terminou — log disponível
           JOB_ID=$(gh api \
             "repos/$REPO/actions/runs/$RUN_ID/jobs" \
             --jq '.jobs[] | select(.name == "scan") | .id')
 
           echo "Job ID: $JOB_ID"
 
-          # Baixa o log deste job específico
           gh api "repos/$REPO/actions/jobs/$JOB_ID/logs" > job.log
 
-          # Parseia as linhas do step do appscan
           TOTAL=$(grep  'Total issues:'  job.log | awk '{print $NF}' | tail -1)
           HIGH=$(grep   'High issues:'   job.log | awk '{print $NF}' | tail -1)
           MEDIUM=$(grep 'Medium issues:' job.log | awk '{print $NF}' | tail -1)
@@ -62,5 +63,13 @@ jobs:
           echo "medium_issues=${MEDIUM:-0}" >> $GITHUB_OUTPUT
           echo "low_issues=${LOW:-0}"       >> $GITHUB_OUTPUT
 
-          # Debug
           echo "Total=$TOTAL | High=$HIGH | Medium=$MEDIUM | Low=$LOW"
+
+  notify:
+    runs-on: ubuntu-latest
+    needs: parse
+    steps:
+      - name: Use results
+        run: |
+          echo "Total : ${{ needs.parse.outputs.total_issues }}"
+          echo "High  : ${{ needs.parse.outputs.high_issues }}"
