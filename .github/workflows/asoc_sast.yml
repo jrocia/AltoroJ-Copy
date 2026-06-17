@@ -15,6 +15,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        
+      - name: Before scan
+        run: |
+          apt update && apt install gradle -y
 
       - name: Run AppScan SAST Scan
         uses: HCL-TECH-SOFTWARE/appscan-sast-action@v1.0.9
