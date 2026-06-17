@@ -18,7 +18,7 @@ jobs:
 
       - name: Run AppScan SAST Scan
         id: appscan
-        uses: HCL-TECH-SOFTWARE/appscan-sast-action@v1.0.8
+        uses: HCL-TECH-SOFTWARE/appscan-sast-action@v1.0.7
         with:
           asoc_key: ${{ secrets.ASOC_KEY }}
           asoc_secret: ${{ secrets.ASOC_SECRET }}
