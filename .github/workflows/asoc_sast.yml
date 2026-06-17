@@ -28,7 +28,7 @@ jobs:
           application_id: ${{ secrets.APP_ID }}
           #static_analysis_only: true
           #open_source_only: true
-          wait_for_analysis: true
+          #wait_for_analysis: true
 
   report:
     runs-on: ubuntu-latest
