@@ -8,7 +8,6 @@ permissions:
   checks: write
   pull-requests: write
   contents: read
-  actions: read
 
 jobs:
   scan:
@@ -18,6 +17,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run AppScan SAST Scan
+        id: appscan
         uses: HCL-TECH-SOFTWARE/appscan-sast-action@v1.0.7
         with:
           asoc_key: ${{ secrets.ASOC_KEY }}
@@ -26,44 +26,84 @@ jobs:
           static_analysis_only: true
           wait_for_analysis: true
 
-  report:
+  parse:
     runs-on: ubuntu-latest
-    needs: scan
+    needs: scan          # ← só roda depois que scan TERMINOU
     if: always()
+    outputs:
+      total_issues:  ${{ steps.parse_results.outputs.total_issues }}
+      high_issues:   ${{ steps.parse_results.outputs.high_issues }}
+      medium_issues: ${{ steps.parse_results.outputs.medium_issues }}
+      low_issues:    ${{ steps.parse_results.outputs.low_issues }}
     steps:
-      - name: Parse and publish security report
+      - name: Parse results from scan job's log
+        id: parse_results
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # ── Download scan job log ──────────────────────────────────────
-          JOB_ID=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs" \
+          RUN_ID="${{ github.run_id }}"
+          REPO="${{ github.repository }}"
+
+          # Agora o job "scan" já terminou — log disponível
+          JOB_ID=$(gh api \
+            "repos/$REPO/actions/runs/$RUN_ID/jobs" \
             --jq '.jobs[] | select(.name == "scan") | .id')
 
-          gh api "repos/${{ github.repository }}/actions/jobs/$JOB_ID/logs" > job.log
+          echo "Job ID: $JOB_ID"
 
-          # ── Extract data from log ──────────────────────────────────────
+          gh api "repos/$REPO/actions/jobs/$JOB_ID/logs" > job.log
+
           TOTAL=$(grep  'Total issues:'  job.log | awk '{print $NF}' | tail -1)
           HIGH=$(grep   'High issues:'   job.log | awk '{print $NF}' | tail -1)
           MEDIUM=$(grep 'Medium issues:' job.log | awk '{print $NF}' | tail -1)
           LOW=$(grep    'Low issues:'    job.log | awk '{print $NF}' | tail -1)
-          SCAN_ID=$(grep 'Scan ID:' job.log | awk '{print $NF}' | tail -1)
-          SCAN_URL=$(grep 'https://cloud.appscan.com/main/myapps' job.log | awk '{print $NF}' | tail -1)
 
-          TOTAL=${TOTAL:-0}; HIGH=${HIGH:-0}; MEDIUM=${MEDIUM:-0}; LOW=${LOW:-0}
+          echo "total_issues=${TOTAL:-0}"   >> $GITHUB_OUTPUT
+          echo "high_issues=${HIGH:-0}"     >> $GITHUB_OUTPUT
+          echo "medium_issues=${MEDIUM:-0}" >> $GITHUB_OUTPUT
+          echo "low_issues=${LOW:-0}"       >> $GITHUB_OUTPUT
 
-          # ── Calculate percentages ──────────────────────────────────────
-          PCT_HIGH=$(( TOTAL > 0 ? HIGH   * 100 / TOTAL : 0 ))
-          PCT_MED=$((  TOTAL > 0 ? MEDIUM * 100 / TOTAL : 0 ))
-          PCT_LOW=$((  TOTAL > 0 ? LOW    * 100 / TOTAL : 0 ))
+          echo "Total=$TOTAL | High=$HIGH | Medium=$MEDIUM | Low=$LOW"
 
-          # ── Overall status ─────────────────────────────────────────────
-          if   [ "$HIGH"   -gt 0 ]; then ICON="🔴"; STATUS="Critical issues found — immediate action required"
-          elif [ "$MEDIUM" -gt 0 ]; then ICON="🟡"; STATUS="Review recommended"
-          else                           ICON="🟢"; STATUS="No critical issues found"; fi
+  notify:
+    runs-on: ubuntu-latest
+    needs: parse
+    steps:
+      - name: Use results
+        run: |
+          echo "Total : ${{ needs.parse.outputs.total_issues }}"
+          echo "High  : ${{ needs.parse.outputs.high_issues }}"
 
-          # ── Build report ───────────────────────────────────────────────
+  report:
+    runs-on: ubuntu-latest
+    needs: parse
+    if: always()
+    steps:
+      - name: Publish security report
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TOTAL:  ${{ needs.parse.outputs.total_issues }}
+          HIGH:   ${{ needs.parse.outputs.high_issues }}
+          MEDIUM: ${{ needs.parse.outputs.medium_issues }}
+          LOW:    ${{ needs.parse.outputs.low_issues }}
+        run: |
+          # Calcula percentuais
+          PCT_HIGH=$(echo "scale=0; $HIGH * 100 / $TOTAL" | bc)
+          PCT_MED=$(echo  "scale=0; $MEDIUM * 100 / $TOTAL" | bc)
+          PCT_LOW=$(echo  "scale=0; $LOW  * 100 / $TOTAL" | bc)
+
+          BAR_HIGH=$(echo "scale=0; $HIGH * 100 / $TOTAL" | bc)
+          BAR_MED=$(echo  "scale=0; $MEDIUM * 100 / $TOTAL" | bc)
+          BAR_LOW=$(echo  "scale=0; $LOW  * 100 / $TOTAL" | bc)
+
+          # Define ícone de status geral
+          if [ "$HIGH" -gt 0 ]; then STATUS_ICON="🔴"; STATUS="Atenção — issues críticos encontrados";
+          elif [ "$MEDIUM" -gt 0 ]; then STATUS_ICON="🟡"; STATUS="Revisão recomendada";
+          else STATUS_ICON="🟢"; STATUS="Nenhum issue crítico"; fi
+
+          # ── Monta o HTML do relatório ──────────────────────────────────
           REPORT=$(cat <<HTML
-          <h2>${ICON} AppScan SAST — Security Report</h2>
+          <h2>${STATUS_ICON} AppScan SAST — Security report</h2>
           <p><strong>${STATUS}</strong></p>
 
           <table>
@@ -85,46 +125,43 @@ jobs:
 
           <table width="100%">
           <tr>
-            <td width="70"><strong>High</strong></td>
-            <td><img src="https://progress-bar.xyz/${PCT_HIGH}/?width=400&color=D85A30&bg=f5f5f5" height="14"/></td>
-            <td width="80" align="right">${PCT_HIGH}% (${HIGH})</td>
+            <td width="60"><strong>High</strong></td>
+            <td><img src="https://progress-bar.xyz/${BAR_HIGH}/?width=400&color=D85A30&bg=f5f5f5" height="14"/></td>
+            <td width="60" align="right">${PCT_HIGH}% (${HIGH})</td>
           </tr>
           <tr>
             <td><strong>Medium</strong></td>
-            <td><img src="https://progress-bar.xyz/${PCT_MED}/?width=400&color=EF9F27&bg=f5f5f5" height="14"/></td>
+            <td><img src="https://progress-bar.xyz/${BAR_MED}/?width=400&color=EF9F27&bg=f5f5f5" height="14"/></td>
             <td align="right">${PCT_MED}% (${MEDIUM})</td>
           </tr>
           <tr>
             <td><strong>Low</strong></td>
-            <td><img src="https://progress-bar.xyz/${PCT_LOW}/?width=400&color=1D9E75&bg=f5f5f5" height="14"/></td>
+            <td><img src="https://progress-bar.xyz/${BAR_LOW}/?width=400&color=1D9E75&bg=f5f5f5" height="14"/></td>
             <td align="right">${PCT_LOW}% (${LOW})</td>
           </tr>
           </table>
 
-          <h3>Scan Details</h3>
-          <table>
-          <tr><td><strong>Scan ID</strong></td><td><code>${SCAN_ID}</code></td></tr>
-          <tr><td><strong>Commit</strong></td><td><code>${{ github.sha }}</code></td></tr>
-          <tr><td><strong>Full report</strong></td><td><a href="${SCAN_URL}">${SCAN_URL}</a></td></tr>
-          <tr><td><strong>Run</strong></td><td><a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">Actions run #${{ github.run_id }}</a></td></tr>
-          </table>
+          <p><sub>🔗 <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">Ver run completa</a> · Scan: <code>${{ github.sha }}</code></sub></p>
           HTML
           )
 
           # ── 1. Job Summary ─────────────────────────────────────────────
           echo "$REPORT" >> $GITHUB_STEP_SUMMARY
 
-          # ── 2. PR comment (only on pull requests) ─────────────────────
+          # ── 2. Comentário no PR ────────────────────────────────────────
           PR_NUMBER=$(gh pr view --json number -q .number 2>/dev/null || echo "")
 
           if [ -n "$PR_NUMBER" ]; then
+            # Remove comentário anterior do bot (evita spam)
             COMMENT_ID=$(gh api \
               "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
               --jq '.[] | select(.user.login == "github-actions[bot]") | select(.body | contains("AppScan SAST")) | .id' \
               | head -1)
 
-            [ -n "$COMMENT_ID" ] && gh api --method DELETE \
-              "repos/${{ github.repository }}/issues/comments/${COMMENT_ID}"
+            if [ -n "$COMMENT_ID" ]; then
+              gh api --method DELETE \
+                "repos/${{ github.repository }}/issues/comments/${COMMENT_ID}"
+            fi
 
             gh pr comment "$PR_NUMBER" --body "$REPORT"
           fi
