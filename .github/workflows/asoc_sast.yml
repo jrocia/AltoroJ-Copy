@@ -18,7 +18,7 @@ jobs:
         
       - name: Before scan
         run: |
-          apt update && apt install gradle -y
+          sudo apt update && sudo apt install gradle -y
 
       - name: Run AppScan SAST Scan
         uses: HCL-TECH-SOFTWARE/appscan-sast-action@v1.0.9
