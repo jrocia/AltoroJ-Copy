@@ -26,9 +26,9 @@ jobs:
           asoc_key: ${{ secrets.ASOC_KEY }}
           asoc_secret: ${{ secrets.ASOC_SECRET }}
           application_id: ${{ secrets.APP_ID }}
-          #static_analysis_only: true
+          static_analysis_only: true
           #open_source_only: true
-          #wait_for_analysis: true
+          wait_for_analysis: true
 
   report:
     runs-on: ubuntu-latest
