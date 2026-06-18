@@ -98,7 +98,7 @@ jobs:
             PCT_LOW=$((  TOTAL > 0 ? LOW      * 100 / TOTAL : 0 ))
 
             if   [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
-              ICON="🔴"; STATUS="Critical issues found — immediate action required"
+              ICON="🔴"; STATUS="Critical/High issues found — action required"
             elif [ "$MEDIUM" -gt 0 ]; then
               ICON="🟡"; STATUS="Review recommended"
             else
