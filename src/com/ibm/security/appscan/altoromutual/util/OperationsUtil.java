@@ -101,7 +101,7 @@ public class OperationsUtil {
 			message = "Transfer amount is invalid";
 		}
 		
-		//if transfer amount is zero then there is nothing to do
+		//if transfer amount is zero then there is nothing to dodfgdfg
 		if (message == null && amount > 0){
 			//Notice that available balance is not checked
 			message = DBUtil.transferFunds(userName, creditActId, debitActId, amount);
