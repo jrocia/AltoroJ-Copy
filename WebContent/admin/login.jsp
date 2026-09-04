@@ -44,7 +44,7 @@ IBM AltoroJ
 			
 			if (error != null && error.trim().length() > 0){
 				request.getSession().removeAttribute("loginError");
-				out.print(error);
+				out.print(org.apache.commons.text.StringEscapeUtils.escapeHtml4(error));
 			}
 			%>
 		</span></p>
@@ -56,4 +56,4 @@ IBM AltoroJ
 	</td>
 </div>
 
-<jsp:include page="/footer.jspf"/>
+<jsp:include page="/footer.jspf"/>```
